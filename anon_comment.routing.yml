@@ -1,0 +1,8 @@
+anon_comment.admin:
+  path: '/admin/content/comment/anon'
+  defaults:
+    _title: 'Anonymized comments'
+    _controller: '\Drupal\anon_comment\Controller\AnonCommentController::adminPage'
+    type: 'new'
+  requirements:
+    _permission: 'administer comments'

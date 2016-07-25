@@ -1,0 +1,6 @@
+anon_comment.admin:
+  title: 'Anonymized comments'
+  description: 'Link to anonymized comments page'
+  route_name: anon_comment.admin
+  parent_id: comment.admin
+  weight: 1

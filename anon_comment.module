@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * @file
+ * A module that allows authenticated users to post comments anonymously without logging out.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\user\Entity\User;
+
+/**
+ * Implements hook_help().
+ */
+function anon_comment_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'admin/help#anon_comment':
+      return '<p>' . t('This module gives authenticated users the option of posting comments anonymously. There are no configuration options at this time. </p>');
+
+    case 'admin/content/comment/anon':
+      return '<p>' . t("Below is a list of the latest <strong>published</strong> anonymized comments. Click on a subject to see the comment, the actual author's name to edit the author's information, 'edit' to modify the text, and 'delete' to remove the comment.") . '</p>';
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function anon_comment_form_comment_form_alter(&$form, &$form_state) {
+
+  $user = User::load(Drupal::currentUser()->id());
+
+  // No need to alter the form if we're already anonymous.
+  if ($user->isAnonymous()) {
+    return;
+  }
+
+  // Implement the checkbox on the comment form.
+  $form['anonymize'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Post this comment anonymously'),
+    '#default_value' => 0,
+    '#weight' => '10',
+    '#access' => Drupal::currentUser()->hasPermission('comment anonymously'),
+  );
+
+  // Alter the previews, if we're doing that.
+  if (array_key_exists('preview', $form['actions'])) {
+    array_unshift($form['actions']['preview']['#submit'], 'anon_comment_form_preview');
+  }
+
+  // Alter the comment as its submitted.
+  if (array_key_exists('#submit', $form) && is_array($form['#submit'])) {
+    array_unshift($form['actions']['submit']['#submit'], 'anon_comment_form_submit');
+    // Log whoever actually made this comment.
+    $form['actions']['submit']['#submit'][] = 'anon_comment_log_author';
+  }
+}
+
+/**
+ * Custom submit handler to anonymize the comment if the user indicated such.
+ */
+function anon_comment_form_submit($form, &$form_state) {
+  if ($form_state->getValue('anonymize') == "1") {
+    // Perform the anonymization... in several places, just to be sure.
+    $form_state->setValue('uid', 0);
+  }
+}
+
+/**
+ * Custom preview handler to anonymize the comment for preview, called before comment_form_build_preview().
+ */
+function anon_comment_form_preview($form, &$form_state) {
+  if ($form_state->getValue('anonymize') == "1") {
+    // Perform the anonymization... in several places, just to be sure.
+    $form_state->setValue('uid', 0);
+  }
+  return $form;
+}
+
+/**
+ * Logs the comment_id and user id into the anon_comment table for safe-keeping.
+ */
+function anon_comment_log_author($form, &$form_state) {
+  if ($form_state->getValue('anonymize') == "1") {
+    $user = User::load(Drupal::currentUser()->id());
+    $field_map = array(
+      'cid' => $form_state->getValue('cid'),
+      'uid' => $user->id(),
+    );
+    $db = Drupal::database();
+    $db->insert('anon_comment_authors')->fields($field_map)->execute();
+  }
+}
+
+/**
+ * Implements hook_comment_delete().
+ */
+function anon_comment_comment_delete($comment) {
+  $db = Drupal::database();
+  $db->delete('anon_comment_authors')->condition('cid', $comment->get('cid')->value)->execute();
+}
